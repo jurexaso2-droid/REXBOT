@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rex Bot - Interactive Emotional Robot</title>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    /* Define smooth color transitions for moods */
+    @property --primary-color {
+      syntax: '<color>';
+      inherits: true;
+      initial-value: #00ffff;
+    }
+    @property --glow-color {
+      syntax: '<color>';
+      inherits: true;
+      initial-value: rgba(0, 255, 255, 0.6);
+    }
+
+    :root {
+      --primary-color: #00ffff;
+      --glow-color: rgba(0, 255, 255, 0.6);
+      --bg-color: #000000;
+    }
+
+    body {
+      background-color: #1a1a1a; 
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      height: 100vh; margin: 0;
+      font-family: 'Share Tech Mono', monospace;
+      overflow: hidden; user-select: none;
+      transition: --primary-color 0.8s ease, --glow-color 0.8s ease;
+    }
+
+    .oled-bezel {
+      background-color: #222; 
+      padding: 1.5vmin; 
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), inset 0 2px 2px rgba(255, 255, 255, 0.1);
+      transition: all 0.5s ease;
+      width: 90vw;
+      max-width: 900px;
+      display: flex;
+    }
+
+    .oled-screen {
+      background-color: var(--bg-color); 
+      width: 100%; 
+      aspect-ratio: 2 / 1; 
+      border-radius: 10px; 
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 1);
+      overflow: hidden; position: relative; cursor: pointer; 
+      -webkit-tap-highlight-color: transparent; 
+    }
+
+    .scanlines {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(to bottom, rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%);
+      background-size: 100% 4px; z-index: 10; pointer-events: none;
+    }
+
+    .glow {
+      color: var(--primary-color); 
+      text-shadow: 0 0 5px var(--glow-color), 0 0 15px var(--glow-color), 0 0 30px var(--glow-color);
+      transition: color 0.5s ease, text-shadow 0.5s ease;
+    }
+
+    .robot-face {
+      --robot-scale: 1.5;
+      --robot-rotate: 0deg;
+      position: absolute; top: 45%; left: 50%;
+      transform: translate(-50%, -50%) scale(var(--robot-scale)) rotate(var(--robot-rotate));
+      display: flex; flex-direction: column; align-items: center;
+      transition: top 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55); z-index: 2;
+    }
+
+    .is-idle .robot-face { animation: breathe 4s ease-in-out infinite; }
+    @keyframes breathe {
+      0%, 100% { transform: translate(-50%, -50%) scale(var(--robot-scale)) rotate(var(--robot-rotate)); }
+      50% { transform: translate(-50%, -53%) scale(var(--robot-scale)) rotate(var(--robot-rotate)); } 
+    }
+
+    .eyes { 
+      display: flex; gap: 40px; margin-bottom: 15px; position: relative;
+      --eye-x: 0px; --eye-y: 0px; --eye-s: 1; 
+      transition: transform 0.5s ease;
+    }
+
+    .eye {
+      width: 30px; height: 50px; 
+      background: var(--primary-color); 
+      border-radius: 15px;
+      box-shadow: 0 0 15px var(--glow-color); 
+      transform: translate(var(--eye-x), var(--eye-y)) scaleY(var(--eye-s));
+      transition: transform 0.3s ease, height 0.5s ease, width 0.5s ease, 
+                  border-radius 0.5s ease, margin-top 0.5s ease, 
+                  background 0.5s ease, box-shadow 0.5s ease, clip-path 0.5s ease;
+      position: relative;
+      display: flex; justify-content: center; align-items: center;
+    }
+
+    .mouth {
+      width: 30px; height: 5px; background: var(--primary-color); border-radius: 5px;
+      box-shadow: 0 0 10px var(--glow-color); 
+      transition: all 0.5s ease; position: relative;
+    }
+
+    /* Lightning fast transition for Lipsync (Music & Voice) */
+    body.is-singing .mouth, body.is-speaking .mouth {
+      transition: height 0.05s linear, width 0.05s linear, border-radius 0.05s linear !important;
+    }
+
+    /* =========================================
+       EMOTION STATES
+       ========================================= */
+    .mood-sad .eye:nth-child(1) { border-radius: 50px 10px 15px 15px; height: 45px; } 
+    .mood-sad .eye:nth-child(2) { border-radius: 10px 50px 15px 15px; height: 45px; } 
+    .mood-sad .mouth { background: transparent; border-top: 4px solid var(--primary-color); border-radius: 50px 50px 0 0; height: 10px; width: 25px; transform: translateY(5px); }
+
+    .mood-sleepy .eye { height: 25px; margin-top: 12px; border-radius: 10px 10px 15px 15px; }
+    .mood-sleepy .mouth { width: 15px; height: 15px; border-radius: 50%; background: transparent; border: 3px solid var(--primary-color); }
+
+    .mood-sleeping .eye { height: 5px; margin-top: 22px; border-radius: 5px; }
+    .mood-sleeping .mouth { width: 10px; height: 10px; border-radius: 50%; background: transparent; border: 3px solid var(--primary-color); }
+    .mood-sleeping .zzz { display: block; }
+
+    .mood-shocked .eye { width: 50px; height: 50px; border-radius: 50%; }
+    .mood-shocked .mouth { width: 15px; height: 25px; border-radius: 50%; background: transparent; border: 4px solid var(--primary-color); }
+
+    .mood-thinking .eyes { --eye-y: -15px; }
+    .mood-thinking .eye { height: 20px; width: 20px; border-radius: 50%; }
+    .mood-thinking .mouth { background: transparent; box-shadow: none; border-radius: 0; width: 40px; }
+    .mood-thinking .mouth::after { content: '...'; position: absolute; color: var(--primary-color); font-size: 28px; top: -18px; left: 0; letter-spacing: 2px; text-shadow: 0 0 10px var(--glow-color); animation: dot-blink 1.5s steps(4, end) infinite; }
+    @keyframes dot-blink { 0% { clip-path: inset(0 100% 0 0); } 100% { clip-path: inset(0 0 0 0); } }
+
+    /* Speaking / Listening State */
+    body:has(.mood-listening) { --primary-color: #ff9900; --glow-color: rgba(255, 153, 0, 0.8); }
+    .mood-listening .eye { height: 40px; width: 40px; border-radius: 50%; animation: pulse-listen 0.8s infinite alternate; }
+    @keyframes pulse-listen { 0% { box-shadow: 0 0 10px var(--glow-color); } 100% { box-shadow: 0 0 40px var(--glow-color); transform: scale(1.1); } }
+
+    /* Other states (Minified for space) */
+    .mood-confused .robot-face { --robot-rotate: 12deg; }
+    .mood-confused .eye:nth-child(1) { height: 35px; border-radius: 50% 10px 15px 15px; }
+    .mood-confused .eye:nth-child(2) { height: 20px; border-radius: 10px 50% 15px 15px; }
+    
+    body:has(.mood-angry) { --primary-color: #ff3333; --glow-color: rgba(255, 51, 51, 0.6); }
+    .mood-angry .eye { clip-path: polygon(0 30%, 100% 0, 100% 100%, 0 100%); border-radius: 0; height: 35px; }
+
+    /* Music Animations */
+    .mood-beat-bounce .eye { animation: beatPulseEye 0.4s infinite alternate; }
+    @keyframes beatPulseEye { 0% { transform: scale(0.9); } 100% { transform: scale(1.2); } }
+    .mood-happy-singer .eye { height: 20px; width: 35px; background: transparent; border-top: 8px solid var(--primary-color); border-radius: 50px 50px 10px 10px; animation: gentleSingerBounce 0.8s infinite alternate; }
+    @keyframes gentleSingerBounce { 0% { transform: translate(-50%, -50%) scale(var(--robot-scale)) rotate(0deg); } 100% { transform: translate(-50%, -55%) scale(var(--robot-scale)) rotate(0deg); } }
+
+    /* ZZZ */
+    .zzzs { position: absolute; top: -50px; right: -60px; pointer-events: none; }
+    .zzz { display: none; position: absolute; color: var(--primary-color); font-weight: bold; font-size: 20px; text-shadow: 0 0 10px var(--glow-color); animation: zzzFloat 3s infinite linear; opacity: 0; }
+    .zzz:nth-child(1) { bottom: 0; left: 0; animation-delay: 0s; font-size: 16px; }
+    .zzz:nth-child(2) { bottom: 15px; left: 15px; animation-delay: 1s; font-size: 20px; }
+    @keyframes zzzFloat { 0% { transform: translate(0, 0) scale(0.8); opacity: 0; } 20% { opacity: 1; } 80% { opacity: 1; } 100% { transform: translate(20px, -40px) scale(1.5); opacity: 0; } }
+
+    /* =========================================
+       ACTIVE "AWAKE" STATE
+       ========================================= */
+    body:has(.is-awake) { --primary-color: #00ffff !important; --glow-color: rgba(0, 255, 255, 0.6) !important; }
+    .is-awake .robot-face { top: 20%; --robot-scale: 0.8; animation: giggle 0.4s infinite; }
+    .is-awake .eye { height: 25px !important; width: 40px !important; margin-top: 0 !important; background: transparent !important; border-top: 10px solid var(--primary-color) !important; border-radius: 50px 50px 0 0 !important; box-shadow: 0 -5px 10px var(--glow-color) !important; transform: translateY(15px) !important; }
+    .is-awake .mouth { width: 80px !important; height: 40px !important; background: transparent !important; border-bottom: 12px solid var(--primary-color) !important; border-radius: 0 0 50px 50px !important; }
+    @keyframes giggle { 0%, 100% { transform: translate(-50%, -50%) scale(var(--robot-scale)) rotate(0deg); } 25% { transform: translate(-50%, -55%) scale(var(--robot-scale)) rotate(3deg); } 50% { transform: translate(-50%, -50%) scale(var(--robot-scale)) rotate(0deg); } 75% { transform: translate(-50%, -45%) scale(var(--robot-scale)) rotate(-3deg); } }
+
+    /* =========================================
+       UI ELEMENTS
+       ========================================= */
+    .time-container {
+      position: absolute; top: 60%; left: 50%; transform: translate(-50%, -40%) scale(0.8);
+      opacity: 0; text-align: center; z-index: 2; transition: all 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      pointer-events: none; width: 100%;
+    }
+    #time { font-size: clamp(3rem, 12vw, 150px); line-height: 1; letter-spacing: 6px; margin-bottom: 0; }
+    #date { font-size: clamp(0.8rem, 2.5vw, 24px); letter-spacing: 3px; color: #00cccc; }
+
+    .tap-hint { position: absolute; bottom: 5%; left: 50%; transform: translateX(-50%); font-size: clamp(12px, 2vw, 18px); letter-spacing: 4px; opacity: 0.6; animation: pulse 2s infinite; pointer-events: none; }
+    @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
+    
+    .is-awake .time-container { top: 55%; transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    .is-awake .tap-hint { opacity: 0; }
+
+    .controls { margin-top: 30px; display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; }
+    .btn { background: transparent; color: var(--primary-color); border: 2px solid var(--primary-color); padding: 12px 24px; font-family: inherit; font-size: 16px; cursor: pointer; border-radius: 8px; text-transform: uppercase; letter-spacing: 2px; transition: all 0.3s ease; }
+    .btn:hover:not(:disabled) { background-color: var(--primary-color); color: #000; box-shadow: 0 0 20px var(--glow-color); }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; border-color: #555; color: #555; }
+    .btn.active { background-color: var(--primary-color); color: #000; box-shadow: 0 0 20px var(--glow-color); }
+    
+    /* Fullscreen Auto-Fit */
+    body.is-fullscreen { background: #000; }
+    body.is-fullscreen .controls { display: none; }
+    body.is-fullscreen .oled-bezel { width: 100vw; height: 100vh; max-width: none; padding: 0; border-radius: 0; box-shadow: none; }
+    body.is-fullscreen .oled-screen { aspect-ratio: auto; border-radius: 0; }
+    body.is-fullscreen #time { font-size: min(28vw, 55vh); }
+    body.is-fullscreen #date { font-size: min(5vw, 8vh); }
+    
+    /* Hidden elements for Sensors */
+    #webcam { display: none; }
+    #motionCanvas { display: none; }
+
+  </style>
+</head>
+<body>
+
+  <div class="oled-bezel" id="bezel">
+    <div class="oled-screen is-idle" id="screen">
+      <div class="scanlines"></div>
+      
+      <div class="robot-face" id="robot">
+        <div class="zzzs" id="zzzs">
+          <div class="zzz">Z</div><div class="zzz">z</div>
+        </div>
+        
+        <div class="eyes" id="eyes">
+          <div class="eye"></div>
+          <div class="eye"></div>
+        </div>
+        <div class="mouth" id="mouth"></div>
+      </div>
+
+      <div class="time-container glow">
+        <div id="time">00:00</div>
+        <div id="date">Loading...</div>
+      </div>
+
+      <div class="tap-hint glow" id="tapHint">TAP TO WAKE REX BOT</div>
+    </div>
+  </div>
+
+  <div class="controls" id="controls">
+    <button id="enableSensorsBtn" class="btn">🎙️/📷 Wake Rex Bot</button>
+    <label class="btn" style="cursor: pointer;">
+      <input type="file" id="audioUpload" accept="audio/*" style="display: none;">
+      📂 MP3
+    </label>
+    <button id="playBtn" class="btn" disabled>🎵 Play</button>
+    <button class="btn" id="landscapeBtn">⛶ Fullscreen</button>
+  </div>
+
+  <!-- Hidden Audio/Video Elements -->
+  <audio id="audioPlayer" crossorigin="anonymous"></audio>
+  <video id="webcam" autoplay playsinline></video>
+  <canvas id="motionCanvas"></canvas>
+
+  <script>
+    // --- 1. CLOCK LOGIC ---
+    function updateClock() {
+      const now = new Date();
+      let hours = now.getHours();
+      let minutes = now.getMinutes();
+      hours = hours % 12 || 12; 
+      hours = hours < 10 ? '0' + hours : hours;
+      minutes = minutes < 10 ? '0' + minutes : minutes;
+      document.getElementById('time').textContent = `${hours}:${minutes}`;
+      document.getElementById('date').textContent = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // --- 2. BASE EMOTION ENGINE ---
+    const screen = document.getElementById('screen');
+    const eyes = document.getElementById('eyes');
+    const robot = document.getElementById('robot');
+    const mouth = document.getElementById('mouth');
+    const eyeElements = document.querySelectorAll('.eye');
+    
+    let isAwake = false;
+    let blinkTimer, lookTimer, moodTimer;
+    const moods =['normal', 'sad', 'sleepy', 'sleeping', 'shocked', 'thinking', 'confused'];
+    let currentMood = 'normal';
+
+    function setEyeScale(scale, speedStr) {
+      if (isAwake || document.body.classList.contains('is-singing') || document.body.classList.contains('is-speaking')) return;
+      eyeElements.forEach(eye => eye.style.transition = `transform ${speedStr} ease`);
+      eyes.style.setProperty('--eye-s', scale);
+    }
+
+    function changeMood(forcedMood = null) {
+      if (isAwake || document.body.classList.contains('is-singing') || document.body.classList.contains('is-speaking')) return;
+      if (currentMood !== 'normal') screen.classList.remove(`mood-${currentMood}`);
+      
+      currentMood = forcedMood || moods[Math.floor(Math.random() * moods.length)];
+      if (currentMood !== 'normal') screen.classList.add(`mood-${currentMood}`);
+
+      clearTimeout(moodTimer);
+      if (!forcedMood) moodTimer = setTimeout(changeMood, Math.random() * 4000 + 5000);
+    }
+
+    function triggerBlink() {
+      let nextTime = Math.random() * 4000 + 2000;
+      if (!isAwake && !document.body.classList.contains('is-singing') && !document.body.classList.contains('is-speaking')) {
+        setEyeScale(0.1, '0.1s');
+        setTimeout(() => setEyeScale(1, '0.1s'), 100);
+      }
+      blinkTimer = setTimeout(triggerBlink, nextTime);
+    }
+
+    function startIdleAnimations() {
+      screen.className = 'oled-screen is-idle';
+      changeMood(); triggerBlink();
+    }
+
+    function wakeUpRobot() {
+      if (document.body.classList.contains('is-singing') || document.body.classList.contains('is-speaking')) return;
+      isAwake = true;
+      clearTimeout(moodTimer);
+      setEyeScale(1, '0.3s');
+      screen.className = 'oled-screen is-awake';
+      
+      setTimeout(() => {
+        screen.classList.remove('is-awake');
+        isAwake = false;
+        changeMood();
+      }, 5000);
+    }
+
+    screen.addEventListener('click', wakeUpRobot);
+    startIdleAnimations();
+
+    // --- 3. AUDIO VISUALIZER (SINGING) ---
+    const audioUpload = document.getElementById('audioUpload');
+    const playBtn = document.getElementById('playBtn');
+    const audioPlayer = document.getElementById('audioPlayer');
+    let isPlaying = false, audioCtx, analyser, source, singingMoodTimer;
+
+    audioUpload.addEventListener('change', e => {
+      if (e.target.files[0]) {
+        audioPlayer.src = URL.createObjectURL(e.target.files[0]);
+        playBtn.disabled = false;
+      }
+    });
+
+    playBtn.addEventListener('click', () => {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser(); analyser.fftSize = 256; 
+        source = audioCtx.createMediaElementSource(audioPlayer);
+        source.connect(analyser); analyser.connect(audioCtx.destination);
+      }
+      audioCtx.resume();
+      if (audioPlayer.paused) {
+        audioPlayer.play(); isPlaying = true; playBtn.textContent = '⏸ Pause';
+        startSinging();
+      } else {
+        audioPlayer.pause(); isPlaying = false; playBtn.textContent = '🎵 Play';
+        stopSinging();
+      }
+    });
+
+    audioPlayer.addEventListener('ended', () => {
+      isPlaying = false; playBtn.textContent = '🎵 Play'; stopSinging();
+    });
+
+    function startSinging() {
+      isAwake = false; clearTimeout(moodTimer);
+      document.body.classList.add('is-singing');
+      screen.className = 'oled-screen mood-beat-bounce';
+      requestAnimationFrame(syncMusicLips);
+    }
+
+    function stopSinging() {
+      document.body.classList.remove('is-singing');
+      robot.style.setProperty('--robot-scale', 1.5);
+      mouth.style.height = ''; mouth.style.width = ''; mouth.style.borderRadius = '';
+      startIdleAnimations();
+    }
+
+    function syncMusicLips() {
+      if (!isPlaying || document.body.classList.contains('is-speaking')) return;
+      requestAnimationFrame(syncMusicLips);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+      let avgVolume = data.reduce((a, b) => a + b) / data.length;
+      
+      mouth.style.height = `${Math.max(5, (avgVolume / 255) * 60)}px`;
+      mouth.style.width = `${Math.max(30, 30 + (avgVolume / 255) * 50)}px`;
+      mouth.style.borderRadius = avgVolume > 80 ? '50px' : '5px';
+      
+      let bass = data.slice(0, 8).reduce((a, b) => a + b) / 8;
+      robot.style.setProperty('--robot-scale', 1.5 + (bass / 255) * 0.25);
+    }
+
+
+    // --- 4. REX BOT: VOICE SYNTHESIS (TTS) & LIP SYNC ---
+    let ttsLipSyncTimer;
+    
+    // Select the best male voice available on the device
+    function getMaleVoice() {
+      const voices = window.speechSynthesis.getVoices();
+      return voices.find(v => 
+        v.name.includes('Male') || v.name.includes('David') || 
+        v.name.includes('Mark') || v.name.includes('Arthur') || 
+        v.name.includes('Google UK English Male')
+      ) || voices[0]; // Fallback to default
+    }
+
+    // Force load voices
+    window.speechSynthesis.onvoiceschanged = getMaleVoice;
+
+    function rexSpeak(text) {
+      if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.voice = getMaleVoice();
+      utterance.pitch = 0.8; // Slightly deeper robot voice
+      utterance.rate = 1.0;
+
+      utterance.onstart = () => {
+        document.body.classList.add('is-speaking');
+        screen.className = 'oled-screen mood-listening';
+        
+        // Pause music if speaking
+        if(isPlaying) audioPlayer.pause();
+        
+        // Simulate lip sync for voice
+        ttsLipSyncTimer = setInterval(() => {
+          mouth.style.height = `${Math.random() * 30 + 5}px`;
+          mouth.style.width = `${Math.random() * 40 + 20}px`;
+          mouth.style.borderRadius = Math.random() > 0.5 ? '50px' : '5px';
+        }, 80); // Change mouth shape every 80ms
+      };
+
+      utterance.onend = () => {
+        clearInterval(ttsLipSyncTimer);
+        document.body.classList.remove('is-speaking');
+        mouth.style.height = ''; mouth.style.width = ''; mouth.style.borderRadius = '';
+        
+        // Resume music if it was paused
+        if(isPlaying) { audioPlayer.play(); startSinging(); }
+        else { startIdleAnimations(); }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+
+    // --- 5. REX BOT: SPEECH RECOGNITION (WAKE WORD) ---
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+
+    function startListening() {
+      if (!SpeechRecognition) {
+        console.warn("Speech recognition not supported in this browser.");
+        return;
+      }
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase();
+        console.log("Heard:", transcript);
+
+        // Regex to catch variations of "Rex Bot"
+        if (/(rex|wrecks|next|text|x)\s*bot/i.test(transcript)) {
+          const responses =[
+            "Hello there. I am Rex Bot.",
+            "Yes? How can I help you?",
+            "Rex Bot is online and ready.",
+            "Did someone call my name?",
+            "Greetings, human."
+          ];
+          const reply = responses[Math.floor(Math.random() * responses.length)];
+          rexSpeak(reply);
+        }
+      };
+
+      recognition.onerror = (e) => console.log("Mic Error:", e.error);
+      recognition.onend = () => {
+        // Auto-restart listening to keep the wake-word active
+        if(document.getElementById('enableSensorsBtn').classList.contains('active')) {
+          recognition.start();
+        }
+      };
+      
+      recognition.start();
+    }
+
+
+    // --- 6. REX BOT: CAMERA WAVE DETECTION ---
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('motionCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    // Low resolution for fast processing
+    const width = 64; 
+    const height = 48;
+    canvas.width = width; 
+    canvas.height = height;
+
+    let previousFrameData = null;
+    let waveScore = 0;
+    let waveCooldown = false;
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        video.srcObject = stream;
+        detectMotionLoop();
+      } catch (err) {
+        console.warn("Camera denied or unavailable.", err);
+      }
+    }
+
+    function detectMotionLoop() {
+      if (!document.getElementById('enableSensorsBtn').classList.contains('active')) return;
+      
+      requestAnimationFrame(detectMotionLoop);
+      if (video.readyState !== video.HAVE_ENOUGH_DATA || waveCooldown || document.body.classList.contains('is-speaking')) return;
+
+      ctx.drawImage(video, 0, 0, width, height);
+      const currentFrame = ctx.getImageData(0, 0, width, height);
+      const currentData = currentFrame.data;
+
+      if (previousFrameData) {
+        let diffPixels = 0;
+        // Compare pixels (Check R, G, B diff)
+        for (let i = 0; i < currentData.length; i += 4) {
+          const rDiff = Math.abs(currentData[i] - previousFrameData[i]);
+          const gDiff = Math.abs(currentData[i+1] - previousFrameData[i+1]);
+          const bDiff = Math.abs(currentData[i+2] - previousFrameData[i+2]);
+          if (rDiff + gDiff + bDiff > 100) diffPixels++; // Threshold for motion
+        }
+
+        // If significant rapid motion detected (Waving)
+        if (diffPixels > (width * height * 0.15)) {
+          waveScore++;
+        } else {
+          if (waveScore > 0) waveScore--; 
+        }
+
+        // Trigger wave action if score is high enough (continuous waving for a moment)
+        if (waveScore > 15) {
+          triggerWaveReaction();
+          waveScore = 0;
+        }
+      }
+
+      // Store current frame for next check
+      previousFrameData = new Uint8ClampedArray(currentData);
+    }
+
+    function triggerWaveReaction() {
+      waveCooldown = true;
+      const greetings =[
+        "Hi! Nice to see you.",
+        "Hello! I see you waving.",
+        "Hey there!",
+        "Greetings!",
+        "Oh, hi!"
+      ];
+      rexSpeak(greetings[Math.floor(Math.random() * greetings.length)]);
+      
+      // Cooldown to prevent spamming greetings
+      setTimeout(() => { waveCooldown = false; }, 8000); 
+    }
+
+
+    // --- 7. INITIALIZE SENSORS ---
+    const enableBtn = document.getElementById('enableSensorsBtn');
+    enableBtn.addEventListener('click', () => {
+      if (!enableBtn.classList.contains('active')) {
+        enableBtn.classList.add('active');
+        enableBtn.textContent = '🟢 Rex Bot Active';
+        
+        // Start Camera and Mic
+        startCamera();
+        startListening();
+        
+        // Introduce himself
+        setTimeout(() => rexSpeak("Sensors activated. Hello, I am Rex Bot."), 500);
+      }
+    });
+
+    // Auto-fit Logic
+    document.getElementById('landscapeBtn').addEventListener('click', () => {
+      document.documentElement.requestFullscreen().then(() => {
+        window.screen.orientation?.lock('landscape').catch(()=>{});
+        document.body.classList.add('is-fullscreen');
+      }).catch(()=>{});
+    });
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement) document.body.classList.remove('is-fullscreen');
+    });
+
+  </script>
+</body>
+</html>
