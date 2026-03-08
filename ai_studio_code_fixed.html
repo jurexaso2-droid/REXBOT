@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rex Bot</title>
+
+<style>
+body{
+  margin:0;
+  background:#111;
+  color:#00ffff;
+  font-family:monospace;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  height:100vh;
+}
+
+#robot{
+  width:420px;
+  height:260px;
+  background:black;
+  border-radius:12px;
+  border:3px solid #00ffff;
+  position:relative;
+  overflow:hidden;
+  transition:transform .3s;
+}
+
+#eyes{
+  display:flex;
+  justify-content:space-around;
+  margin-top:30px;
+}
+
+.eye{
+  width:70px;
+  height:70px;
+  background:#00ffff;
+  border-radius:50%;
+  transition:transform .2s, background .3s;
+}
+
+#mouth{
+  width:140px;
+  height:16px;
+  background:#00ffff;
+  margin:20px auto;
+  border-radius:10px;
+  transition:all .2s;
+}
+
+/* speaking animation */
+.speaking #mouth{
+  height:40px;
+  border-radius:50%;
+  animation:talk .25s infinite alternate;
+}
+
+@keyframes talk{
+  from{transform:scaleY(.6)}
+  to{transform:scaleY(1.2)}
+}
+
+/* blink */
+.blink .eye{ transform:scaleY(.1); }
+
+/* emotions */
+.idle .eye{ background:#007777 }
+.happy .eye{ background:#00ffcc }
+.sad .eye{ background:#004444 }
+
+/* dance animation */
+.dance{ animation:danceMove .6s infinite alternate }
+
+@keyframes danceMove{
+  from{ transform:rotate(-4deg) }
+  to{ transform:rotate(4deg) }
+}
+
+/* mic + hand icons */
+#icons{
+  position:absolute;
+  bottom:10px;
+  width:100%;
+  text-align:center;
+  font-size:40px;
+  opacity:0;
+  transition:opacity .3s;
+}
+
+.showIcons{ opacity:1 }
+
+/* mic bounce */
+.mic{ animation:micDance .5s infinite alternate }
+
+@keyframes micDance{
+  from{ transform:translateY(-5px) }
+  to{ transform:translateY(5px) }
+}
+
+/* hand wave */
+.hand{ animation:wave 1s infinite }
+
+@keyframes wave{
+  0%{ transform:rotate(0deg)}
+  50%{ transform:rotate(25deg)}
+  100%{ transform:rotate(0deg)}
+}
+
+#controls{ margin-top:20px }
+
+button{
+  padding:10px 16px;
+  margin:4px;
+  font-size:14px;
+  cursor:pointer;
+}
+
+#visionContainer{ margin-top:20px; display:none }
+
+video{ width:240px; border:2px solid #00ffff }
+
+#status{
+  margin-top:10px;
+  font-size:12px;
+  color:#7ff;
+  text-align:center;
+  max-width:400px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="robot" class="idle">
+
+<div id="eyes">
+<div class="eye"></div>
+<div class="eye"></div>
+</div>
+
+<div id="mouth"></div>
+
+<div id="icons">
+<span id="hand" class="hand">🖐️</span>
+<span id="mic" class="mic">🎤</span>
+</div>
+
+</div>
+
+<div id="controls">
+<button id="enableSensorsBtn">Enable Sensors</button>
+<button id="toggleVisionBtn" disabled>Camera</button>
+<button id="fullscreenBtn">Fullscreen</button>
+</div>
+
+<div id="status">Sensors disabled</div>
+
+<div id="visionContainer">
+<video id="webcam" autoplay playsinline muted></video>
+</div>
+
+<script>
+
+const robot=document.getElementById("robot")
+const icons=document.getElementById("icons")
+const hand=document.getElementById("hand")
+const mic=document.getElementById("mic")
+
+let lastInteraction=Date.now()
+
+function setStatus(msg){
+ document.getElementById("status").textContent=msg
+}
+
+// =============================
+// SPEECH WITH ANIMATION
+// =============================
+
+function rexSpeak(text){
+
+ lastInteraction=Date.now()
+ robot.classList.remove("idle","sad")
+ robot.classList.add("speaking","happy")
+
+ icons.classList.add("showIcons")
+ hand.style.display="none"
+ mic.style.display="inline-block"
+
+ try{
+
+ const utter=new SpeechSynthesisUtterance(text)
+
+ utter.onend=function(){
+
+ robot.classList.remove("speaking")
+ icons.classList.remove("showIcons")
+
+ }
+
+ speechSynthesis.speak(utter)
+
+ }catch(e){
+ console.warn("speech error",e)
+ }
+}
+
+// =============================
+// SING / DANCE MODE
+// =============================
+
+function startDance(){
+
+ robot.classList.add("dance","happy")
+
+ icons.classList.add("showIcons")
+ mic.style.display="inline-block"
+ hand.style.display="none"
+
+ rexSpeak("Playing music mode")
+
+ setTimeout(()=>{
+ robot.classList.remove("dance")
+ icons.classList.remove("showIcons")
+ },8000)
+}
+
+// =============================
+// WAVE GREETING
+// =============================
+
+function waveHello(){
+
+ icons.classList.add("showIcons")
+ hand.style.display="inline-block"
+ mic.style.display="none"
+
+ rexSpeak("Hello welcome home")
+
+ setTimeout(()=>icons.classList.remove("showIcons"),4000)
+}
+
+// =============================
+// COMMANDS
+// =============================
+
+const customCommands=[
+{keywords:["hello","hi"],action:()=>waveHello()},
+{keywords:["how are you"],response:"I am operating perfectly."},
+{keywords:["time"],response:()=>"The time is "+new Date().toLocaleTimeString()},
+{keywords:["date"],response:()=>"Today is "+new Date().toDateString()},
+{keywords:["joke"],response:"Why did the robot cross the road? Because it was programmed by the chicken."},
+{keywords:["who are you"],response:"I am Rex Bot."},
+{keywords:["music"],action:()=>startDance()},
+{keywords:["sing"],action:()=>startDance()},
+{keywords:["dance"],action:()=>startDance()},
+{keywords:["weather"],response:"Weather data not available."}
+]
+
+// =============================
+// VOICE RECOGNITION
+// =============================
+
+const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition
+let recognition=null
+
+function startListening(){
+
+ if(!SpeechRecognition){
+ setStatus("Speech recognition not supported")
+ return
+ }
+
+ recognition=new SpeechRecognition()
+ recognition.continuous=true
+ recognition.lang="en-US"
+
+ recognition.onresult=function(e){
+
+ const t=e.results[e.results.length-1][0].transcript.toLowerCase()
+
+ if(!t.includes("rex bot")) return
+
+ lastInteraction=Date.now()
+
+ for(const cmd of customCommands){
+
+ if(cmd.keywords.some(k=>t.includes(k))){
+
+ if(cmd.action){
+ cmd.action()
+ return
+ }
+
+ const r=typeof cmd.response==="function"?cmd.response():cmd.response
+ rexSpeak(r)
+ return
+ }
+ }
+
+ rexSpeak("Command not recognized")
+ }
+
+ recognition.start()
+}
+
+// =============================
+// CAMERA
+// =============================
+
+const video=document.getElementById("webcam")
+let stream=null
+let cameraEnabled=false
+
+async function startCamera(){
+
+ if(!navigator.mediaDevices) return
+
+ try{
+ stream=await navigator.mediaDevices.getUserMedia({video:true})
+ video.srcObject=stream
+ setStatus("Camera active")
+ }catch(err){
+ setStatus("Camera blocked or denied")
+ }
+}
+
+function stopCamera(){
+ if(stream){ stream.getTracks().forEach(t=>t.stop()) }
+}
+
+// =============================
+// FULLSCREEN
+// =============================
+
+async function enterFullscreen(){
+ const el=document.documentElement
+ try{
+ if(el.requestFullscreen) await el.requestFullscreen()
+ }catch(e){
+ setStatus("Fullscreen blocked")
+ }
+}
+
+// =============================
+// IDLE EMOTION SYSTEM
+// =============================
+
+function emotionLoop(){
+
+ const idleTime=(Date.now()-lastInteraction)/1000
+
+ if(idleTime>25){
+ robot.classList.remove("happy")
+ robot.classList.add("sad")
+ }
+ else if(idleTime>12){
+ robot.classList.add("idle")
+ }
+
+ requestAnimationFrame(emotionLoop)
+}
+
+setInterval(()=>{
+ robot.classList.add("blink")
+ setTimeout(()=>robot.classList.remove("blink"),200)
+},4000)
+
+emotionLoop()
+
+// =============================
+// UI EVENTS
+// =============================
+
+const enableBtn=document.getElementById("enableSensorsBtn")
+const camBtn=document.getElementById("toggleVisionBtn")
+
+enableBtn.onclick=function(){
+
+ enableBtn.disabled=true
+ camBtn.disabled=false
+
+ setStatus("Sensors activated")
+
+ waveHello()
+
+ startListening()
+}
+
+camBtn.onclick=function(){
+
+ const vc=document.getElementById("visionContainer")
+
+ cameraEnabled=!cameraEnabled
+
+ if(cameraEnabled){
+ vc.style.display="block"
+ startCamera()
+ }else{
+ vc.style.display="none"
+ stopCamera()
+ }
+}
+
+document.getElementById("fullscreenBtn").onclick=enterFullscreen
+
+// =============================
+// TESTS
+// =============================
+
+function runTests(){
+ console.assert(Array.isArray(customCommands),"Commands must be array")
+ console.assert(customCommands.length>=10,"Need 10 commands")
+ console.assert(typeof rexSpeak==="function","rexSpeak missing")
+ console.assert(typeof startDance==="function","dance system missing")
+ console.assert(typeof waveHello==="function","wave system missing")
+ console.assert(typeof emotionLoop==="function","emotion system missing")
+ console.log("Rex Bot tests passed")
+}
+
+runTests()
+
+</script>
+
+</body>
+</html>
